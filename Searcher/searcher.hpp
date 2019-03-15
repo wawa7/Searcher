@@ -3,6 +3,7 @@
 #include<vector>
 #include<fstream>
 #include<boost/algorithm/string.hpp>
+#include<jsoncpp/json/json.h>
 #include"cppjieba/Jieba.hpp"
 
 const char* const DICT_PATH = "../dict/jieba.dict.utf8";
@@ -22,9 +23,9 @@ struct Weight{
 	uint64_t doc_id;
 	size_t weight;
 };
+typedef std::vector<Weight> WeightList;
 
 class Index{
-	typedef std::vector<Weight> WeightList;
 public:
 	Index():jieba_(DICT_PATH,
   		      HMM_PATH,
@@ -32,17 +33,17 @@ public:
   		      IDF_PATH,
   		      STOP_WORD_PATH){
 	}
-	const DocInfo* GetDocInfo(uint64_t doc_id) const;
-	const WeightList* GetCutWords(const std::string str) const;
+	const DocInfo* GetDocInfo(uint64_t doc_id);
+	const WeightList* GetCutWords(const std::string str);
 	bool Build(const std::string input_path);
-	void CutWord(std::string& line,std::vector<std::string>* result);
+	void CutWord(const std::string& line,std::vector<std::string>* result);
 private:
-	void Help(const int& count,const std::string& progress);
+	static void Help(const int& count,std::string& progress);
 	const DocInfo* BuildForward(const std::string& line);
 	void BuildInverted(const DocInfo& doc);
 private:
 	std::vector<DocInfo> forward_index_;
-	std::unordered_map<std::string,WeightList> invertes_index_;
+	std::unordered_map<std::string,WeightList> inverted_index_;
 	cppjieba::Jieba jieba_;
 };
 
@@ -56,7 +57,7 @@ public:
 			delete index_;
 	}
 	void Init(const std::string& path);
-	void Search(const std::string key,std::string* result);
+	void Search(const std::string& key,std::string* result);
 private:
 	static void Sort(std::vector<Weight> & results);
 	std::string GetDesc(const std::string& content,const std::string& key);
