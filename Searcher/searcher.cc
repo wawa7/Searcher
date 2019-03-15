@@ -1,14 +1,15 @@
-#include"searcher.hpp"
 #include<iostream>
 #include<vector>
+#include<string>
 #include<fstream>
 #include<algorithm>
+#include"searcher.hpp"
 #include<jsoncpp/json/json.h>
-#include"../common/utiil.hpp"
+#include"../common/util.hpp"
 
 
 const DocInfo* Index::GetDocInfo(uint64_t doc_id){
-	if(doc_id > forward_indedx_.size()){
+	if(doc_id > forward_index_.size()){
 		std::cout<<"get doc info fail"<<std::endl;
 		return nullptr;
 	}
@@ -17,7 +18,7 @@ const DocInfo* Index::GetDocInfo(uint64_t doc_id){
 
 const WeightList* Index::GetCutWords(const std::string str){
 	auto pos = inverted_index_.find(str);
-	if(auto == inverted_index_.end()){
+	if(pos == inverted_index_.end()){
 		std::cout<<"get cut words fail"<<std::endl;
 		return nullptr;
 	}
@@ -25,23 +26,23 @@ const WeightList* Index::GetCutWords(const std::string str){
 	return &(pos->second);
 }
 
-const DocInfo* Index::BuildForward(const std::string line){
+const DocInfo* Index::BuildForward(const std::string& line){
 	std::vector<std::string> results;
-	Util:: Split(line,&results);
+	Util:: Split(line,&results,"\3");
 	if(results.size() != 3){
 		std::cout<<"buildforward error"<<std::endl;
 		return NULL;
 	}
 	DocInfo doc;
 	doc.doc_id = forward_index_.size();
-	doc.title = result[0];
-	doc.url = result[1];
-	doc.content = result[2];
+	doc.title = results[0];
+	doc.url = results[1];
+	doc.content = results[2];
 	forward_index_.push_back(doc);
 	return &forward_index_.back();
 }
 
-void Index::BuildInverted(const DocInof& doc){
+void Index::BuildInverted(const DocInfo& doc){
 	std::vector<std::string> content;
 	std::vector<std::string> title;
 	CutWord(doc.title,&title);
@@ -53,19 +54,19 @@ void Index::BuildInverted(const DocInof& doc){
 	};
 
 	std::unordered_map<std::string,WordCnt> word_cnt;
-	for(const auto& word: title){
+	for(auto word: title){
 		boost::to_lower(word);
 		++word_cnt[word].title;
 	}
 
-	for(const auto& word: content){
+	for(auto word: content){
 		boost::to_lower(word);
 		++word_cnt[word].content;
 	}
 
 	for(const auto& word: word_cnt){
 		Weight weight;
-		weight.doc_id = doc_id;
+		weight.doc_id = doc.doc_id;
 		weight.key = word.first;
 		weight.weight = word.second.title*10 + word.second.content;
 
@@ -74,7 +75,7 @@ void Index::BuildInverted(const DocInof& doc){
 	}
 }
 
-static void Index::Help(const int& count,std::string progress){
+static void Index::Help(const int& count,std::string& progress){
 	double all = 5828.0;
 	std::string label = "|/-\\";
 
@@ -84,7 +85,7 @@ static void Index::Help(const int& count,std::string progress){
 		progress+='#';
 	}
 
-	const char* temp = progress.s_str();
+	const char* temp = progress.c_str();
 	printf("[%-100s][%d%%][%c]\r",temp,size,label[size%4]);
 	fflush(stdout);
 }
@@ -94,7 +95,7 @@ bool Index::Build(const std::string file){
 	if(!input_file.is_open()){
 		std::cout<<"build open file error"<<std::endl;
 		return  false;
-	
+    }	
 	int count = 0;
 	std::string progress;
 	std::string line;
@@ -111,17 +112,17 @@ bool Index::Build(const std::string file){
 
 }
 
-void Index::CutWord(const std::string content,std::vector<std:string>* result){
+void Index::CutWord(const std::string& content,std::vector<std::string>* result){
 	jieba_.CutForSearch(content,*result);
 }
 
 void Searcher::Init(const std::string& path){
-	index_.Build(path);
+	index_->Build(path);
 }
 
 std::string Searcher::GetDesc(const std::string& content,const std::string& key){
 	size_t pos = content.find(key);
-	if(pos == std:string::npos){
+	if(pos == std::string::npos){
 		if(content.size() < 160)
 			return content;
 		else
@@ -148,31 +149,31 @@ static void Searcher::Sort(std::vector<Weight>& results){
 		++it;
 	}
 
-	while(it != v.end()){
+	while(it != results.end()){
 		if(w->doc_id == it->doc_id){
 			w->weight+=it->weight;
-			it = earse(it);
+			it = results.erase(it);
 		}else{
 			w = it;
 			++it;
 		}
 	}
 
-	std::sort(results.begin(),results.end(),[](const Weight& w1,cost Weight& w2
+	std::sort(results.begin(),results.end(),[](const Weight& w1,const Weight& w2
 				){return w1.weight>w2.weight;});
 }
 
-void Searcher::Search(const std::string& key,std::vector<std::string>* json_results){
+void Searcher::Search(const std::string& key,std::string* json_results){
 	std::vector<std::string> results;
 	index_->CutWord(key,&results);
 
 	std::vector<Weight> list_results;
-	for(const auto& word:results){
+	for(auto word:results){
 		boost::to_lower(word);
 		auto list = index_->GetCutWords(word);
 		if(list == nullptr)
 			continue;
-		list_results.insert(list_results.end(),list.begin(),list.end());
+		list_results.insert(list_results.end(),list->begin(),list->end());
 	}
 	
 
@@ -181,15 +182,15 @@ void Searcher::Search(const std::string& key,std::vector<std::string>* json_resu
 	//std::sort(list_results.begin(),list_results.end(),[](const Weight& w1,
 	//		const Weight&w2){return w1.weight>w2.weight;});
 
-	Json::Value results;
+	Json::Value Results;
 	for(const auto& w : list_results){
 		const DocInfo* doc = index_->GetDocInfo(w.doc_id);
 		Json::Value result;
-		result["title"] = doc->title;
+	    result["title"] = doc->title;
 		result["url"] = doc->url;
 		result["desc"] = GetDesc(doc->content,w.key);
-		results.append(result);
+		Results.append(result);
 	}
-	Json:;FastWritter writer;
-	*json_result = writer.write();
+    Json::FastWriter writer;
+	*json_results = writer.write(Results);
 }
